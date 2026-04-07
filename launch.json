@@ -1,0 +1,71 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Playwright Current File",
+            "program": "${workspaceFolder}/node_modules/.bin/playwright",
+            "args": [
+                "test",
+                "--config=playwright.debug.config.ts",
+                "--headed",
+                "${file}"
+            ],
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "env": {
+                "PWDEBUG": "1"
+            },
+            "sourceMaps": true,
+            "smartStep": true,
+            "stopOnEntry": false
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Playwright with Inspector",
+            "program": "${workspaceFolder}/node_modules/.bin/playwright",
+            "args": [
+                "test",
+                "--config=playwright.debug.config.ts",
+                "--debug",
+                "${file}"
+            ],
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "sourceMaps": true,
+            "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Specific Test",
+            "program": "${workspaceFolder}/node_modules/.bin/playwright",
+            "args": [
+                "test",
+                "--config=playwright.debug.config.ts",
+                "--headed",
+                "--grep",
+                "${input:testName}"
+            ],
+            "console": "integratedTerminal",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "sourceMaps": true
+        }
+    ],
+    "inputs": [
+        {
+            "id": "testName",
+            "description": "Test name to run",
+            "default": "",
+            "type": "promptString"
+        }
+    ]
+}

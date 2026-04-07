@@ -1,0 +1,104 @@
+# Job template: Complete test execution job
+# Combines all step templates into a reusable job definition
+# Supports both Azure Workspace and Local Agent execution
+parameters:
+  - name: jobName
+    type: string
+    default: "ExecuteTests"
+  - name: displayName
+    type: string
+    default: "Execute Tests"
+  - name: condition
+    type: string
+    default: "true"
+  - name: environment
+    type: string
+    default: "qa"
+    values:
+      - dev
+      - qa
+      - staging
+      - load
+  - name: executionMode
+    type: string
+    default: "azure-workspace"
+    values:
+      - azure-workspace
+      - local-agent
+  - name: configFile
+    type: string
+    default: "playwright.kv.config.ts"
+  - name: testPath
+    type: string
+    default: "staticTestcases"
+  - name: testFilter
+    type: string
+    default: "@all"
+  - name: scheduleOverrideFilter
+    type: string
+    default: ""
+  - name: scheduleName
+    type: string
+    default: ""
+  - name: testCaseIds
+    type: string
+    default: " "
+  - name: timeoutInMinutes
+    type: number
+    default: 60
+  - name: reportArtifactName
+    type: string
+    default: "playwright-html-report"
+  - name: publishTraces
+    type: boolean
+    default: false
+  - name: reportingRun
+    type: boolean
+    default: false
+  - name: workers
+    type: string
+    default: " "
+
+jobs:
+  - job: ${{ parameters.jobName }}
+    displayName: ${{ parameters.displayName }}
+    condition: ${{ parameters.condition }}
+    timeoutInMinutes: ${{ parameters.timeoutInMinutes }}
+    pool:
+      ${{ if eq(parameters.executionMode, 'local-agent') }}:
+        name: "Automated Testing"
+      ${{ else }}:
+        vmImage: ubuntu-latest
+    steps:
+      # Checkout and switch to environment-specific branch
+      - template: ../steps/checkout-branch.yml
+        parameters:
+          environment: ${{ parameters.environment }}
+
+      # Setup Node.js and npm
+      - template: ../steps/setup-node.yml
+
+      # Validate test sync state (advisory only)
+      - template: ../steps/sync-validation.yml
+
+      # Execute tests
+      - template: ../steps/run-tests.yml
+        parameters:
+          configFile: ${{ parameters.configFile }}
+          testPath: ${{ parameters.testPath }}
+          environment: ${{ parameters.environment }}
+          executionMode: ${{ parameters.executionMode }}
+          testFilter: ${{ parameters.testFilter }}
+          testCaseIds: ${{ parameters.testCaseIds }}
+          scheduleOverrideFilter: ${{ parameters.scheduleOverrideFilter }}
+          scheduleName: ${{ parameters.scheduleName }}
+          reportingRun: ${{ parameters.reportingRun }}
+          workers: ${{ parameters.workers }}
+
+      # Publish results
+      - template: ../steps/publish-results.yml
+        parameters:
+          testRunTitle: "${{ parameters.displayName }}"
+          artifactName: ${{ parameters.reportArtifactName }}
+          publishTraces: ${{ parameters.publishTraces }}
+          tracesArtifactName: "${{ parameters.reportArtifactName }}-traces"

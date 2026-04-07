@@ -1,0 +1,269 @@
+# Step template: Execute Playwright tests
+# Supports both Azure Workspace and Local Agent execution modes
+# Handles test filtering via tags, test case IDs, or schedule overrides
+parameters:
+  - name: configFile
+    type: string
+    default: "playwright.kv.config.ts"
+  - name: testPath
+    type: string
+    default: "staticTestcases"
+  - name: environment
+    type: string
+    default: "qa"
+  - name: executionMode
+    type: string
+    default: "azure-workspace"
+    values:
+      - azure-workspace
+      - local-agent
+  - name: testFilter
+    type: string
+    default: "@all"
+  - name: testCaseIds
+    type: string
+    default: " "
+  - name: scheduleOverrideFilter
+    type: string
+    default: ""
+  - name: scheduleName
+    type: string
+    default: ""
+  - name: reportingRun
+    type: boolean
+    default: false
+  - name: workers
+    type: string
+    default: " "
+
+steps:
+  # Get Test Case IDs from Azure Test Plans (if triggered via "Run with options")
+  - task: PowerShell@2
+    name: GetTestCaseIds
+    inputs:
+      targetType: "inline"
+      script: |
+        $testRunId = "$(testRunId)"
+        $orgUrl = "$(AZURE_DEVOPS_ORG_URL)"
+        $project = "$(AZURE_DEVOPS_PROJECT)"
+        $token = "$(System.AccessToken)"
+
+        Write-Host "=== Azure Test Plans Integration ==="
+        Write-Host "TestRun.TestRunId: $testRunId"
+        Write-Host "TestPlan.TestPlanId: $(testPlanId)"
+
+        if ([string]::IsNullOrEmpty($testRunId)) {
+            Write-Host "No Test Run ID provided - not triggered from Azure Test Plans"
+            Write-Host "##vso[task.setvariable variable=testCaseIds;isOutput=true]"
+            exit 0
+        }
+
+        Write-Host "Triggered from Azure Test Plans! Querying test cases for Run ID: $testRunId"
+
+        $headers = @{
+            Authorization = "Bearer $token"
+            "Content-Type" = "application/json"
+        }
+
+        $apiUrl = "${orgUrl}${project}/_apis/test/runs/${testRunId}/results?api-version=7.1"
+        Write-Host "API URL: $apiUrl"
+
+        try {
+            $response = Invoke-RestMethod -Uri $apiUrl -Headers $headers -Method Get
+            $testCaseIds = @()
+
+            foreach ($result in $response.value) {
+                if ($result.testCase -and $result.testCase.id) {
+                    $testCaseIds += $result.testCase.id
+                    Write-Host "Found Test Case ID: $($result.testCase.id) - $($result.testCaseTitle)"
+                }
+            }
+
+            if ($testCaseIds.Count -eq 0) {
+                Write-Host "No test cases found in test run"
+                Write-Host "##vso[task.setvariable variable=testCaseIds;isOutput=true]"
+            } else {
+                $grepPattern = ($testCaseIds | ForEach-Object { "@\[$_\]" }) -join "|"
+                Write-Host "Generated grep pattern: $grepPattern"
+                Write-Host "##vso[task.setvariable variable=testCaseIds;isOutput=true]$grepPattern"
+            }
+        } catch {
+            Write-Host "Error querying Azure DevOps API: $_"
+            Write-Host "##vso[task.setvariable variable=testCaseIds;isOutput=true]"
+        }
+    displayName: "Get Test Case IDs from Azure Test Plans"
+    env:
+      AZURE_DEVOPS_ORG_URL: $(AZURE_DEVOPS_ORG_URL)
+      AZURE_DEVOPS_PROJECT: $(AZURE_DEVOPS_PROJECT)
+
+  # === AZURE WORKSPACE MODE ===
+  - ${{ if eq(parameters.executionMode, 'azure-workspace') }}:
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: "AzureConnection"
+        scriptType: "bash"
+        scriptLocation: "inlineScript"
+        addSpnToEnvironment: true
+        inlineScript: |
+          echo "Starting Tests with Azure Playwright Workspace"
+          echo "Environment: ${{ parameters.environment }}"
+          echo "Base URL: $BASE_URL"
+          echo "Config File: ${{ parameters.configFile }}"
+          echo "Test Path: ${{ parameters.testPath }}"
+          echo "Test Run ID (from Test Plans): $TEST_RUN_ID"
+          echo "Test Case IDs (from API): $TEST_CASE_IDS_FROM_API"
+          echo "Test Case IDs (manual): ${{ parameters.testCaseIds }}"
+          echo "Test Filter (default): ${{ parameters.testFilter }}"
+          echo "Schedule Override: ${{ parameters.scheduleOverrideFilter }}"
+          echo "Reporting Run: $REPORTING_RUN"
+          echo "Workspace URL: $PLAYWRIGHT_SERVICE_URL"
+          echo "Build ID: $(Build.BuildId)"
+
+          # Export Azure credentials for DefaultAzureCredential
+          export AZURE_CLIENT_ID=$servicePrincipalId
+          export AZURE_TENANT_ID=$tenantId
+          export AZURE_FEDERATED_TOKEN=$idToken
+
+          # Priority for test filter:
+          # 1. Schedule override (if cron schedule matches)
+          # 2. Test Case IDs from Azure Test Plans API (Run with options)
+          # 3. Manual test case IDs parameter (comma-separated)
+          # 4. Tag-based filter
+          if [ -n "${{ parameters.scheduleOverrideFilter }}" ] && [ "$CRON_SCHEDULE_NAME" = "${{ parameters.scheduleName }}" ]; then
+            export TEST_FILTER="${{ parameters.scheduleOverrideFilter }}"
+            echo "Schedule override: Running ${{ parameters.scheduleOverrideFilter }} tests"
+          elif [ -n "$TEST_CASE_IDS_FROM_API" ]; then
+            export TEST_FILTER="$TEST_CASE_IDS_FROM_API"
+            echo "Running tests from Azure Test Plans: $TEST_FILTER"
+          elif [ -n "$(echo '${{ parameters.testCaseIds }}' | xargs)" ]; then
+            IDS="$(echo '${{ parameters.testCaseIds }}' | xargs)"
+            GREP_PATTERN=$(echo "$IDS" | tr ',' '\n' | sed 's/^/@\\[/' | sed 's/$/\\]/' | tr '\n' '|' | sed 's/|$//')
+            export TEST_FILTER="$GREP_PATTERN"
+            export TEST_CASE_IDS_FOR_REPORTER="$IDS"
+            echo "Running tests with IDs: $IDS"
+            echo "  TEST_FILTER: $TEST_FILTER"
+          else
+            export TEST_FILTER="${{ parameters.testFilter }}"
+            echo "Running tests with filter: $TEST_FILTER"
+          fi
+
+          WORKERS_FLAG=""
+          if [ -n "$(echo '${{ parameters.workers }}' | xargs)" ]; then
+            WORKERS_FLAG="--workers=${{ parameters.workers }}"
+            echo "Worker override: $WORKERS_FLAG"
+          fi
+
+          npx playwright test ${{ parameters.testPath }} --config=${{ parameters.configFile }} $WORKERS_FLAG
+      displayName: "Execute Tests (Azure Workspace)"
+      continueOnError: true
+      env:
+        CI: "true"
+        BASE_URL: "https://${{ parameters.environment }}.aventis.swiss/"
+        CRON_SCHEDULE_NAME: $(Build.CronSchedule.DisplayName)
+        TEST_RUN_ID: $(testRunId)
+        TEST_CASE_IDS_FROM_API: $(GetTestCaseIds.testCaseIds)
+        PLAYWRIGHT_SERVICE_URL: $(PLAYWRIGHT_SERVICE_URL)
+        PLAYWRIGHT_SERVICE_RUN_ID: $(Build.BuildId)
+        AZURE_DEVOPS_ORG_URL: $(AZURE_DEVOPS_ORG_URL)
+        AZURE_DEVOPS_PROJECT: $(AZURE_DEVOPS_PROJECT)
+        AZURE_DEVOPS_KV_PLAN_ID: $(AZURE_DEVOPS_KV_PLAN_ID)
+        AZURE_DEVOPS_TOKEN: $(System.AccessToken)
+        AZURE_DEVOPS_ENVIRONMENT: "Azure_Workspace"
+        ${{ if eq(parameters.environment, 'dev') }}:
+          AZURE_DEVOPS_CONFIG_ID: "77"
+        ${{ elseif eq(parameters.environment, 'staging') }}:
+          AZURE_DEVOPS_CONFIG_ID: "103"
+        ${{ elseif eq(parameters.environment, 'load') }}:
+          AZURE_DEVOPS_CONFIG_ID: "85"
+        ${{ else }}:
+          AZURE_DEVOPS_CONFIG_ID: "93"
+        AZURE_PW_TEST_RUN_ID: $(Build.BuildId)
+        SLOWMO: $(SLOWMO)
+        STABILITY_DELAY: $(STABILITY_DELAY)
+        ACTION_STABILITY_WAIT: $(ACTION_STABILITY_WAIT)
+        SLOW_MODE: $(SLOW_MODE)
+        REPORTING_RUN: ${{ parameters.reportingRun }}
+
+  # === LOCAL AGENT MODE ===
+  - ${{ if eq(parameters.executionMode, 'local-agent') }}:
+    - task: PowerShell@2
+      inputs:
+        targetType: "inline"
+        script: |
+          Write-Host "Starting Tests on Local Agent"
+          Write-Host "Environment: ${{ parameters.environment }}"
+          Write-Host "Base URL: $env:BASE_URL"
+          Write-Host "Config File: ${{ parameters.configFile }}"
+          Write-Host "Test Path: ${{ parameters.testPath }}"
+          Write-Host "Test Run ID (from Test Plans): $env:TEST_RUN_ID"
+          Write-Host "Test Case IDs (from API): $env:TEST_CASE_IDS_FROM_API"
+          Write-Host "Test Case IDs (manual): ${{ parameters.testCaseIds }}"
+          Write-Host "Test Filter (default): ${{ parameters.testFilter }}"
+          Write-Host "Schedule Override: ${{ parameters.scheduleOverrideFilter }}"
+          Write-Host "Reporting Run: $env:REPORTING_RUN"
+          Write-Host "Build ID: $(Build.BuildId)"
+
+          # Install Playwright browsers if not cached
+          npx playwright install chromium
+
+          # Priority for test filter:
+          # 1. Schedule override (if cron schedule matches)
+          # 2. Test Case IDs from Azure Test Plans API (Run with options)
+          # 3. Manual test case IDs parameter (comma-separated)
+          # 4. Tag-based filter
+          $testCaseIdsFromApi = $env:TEST_CASE_IDS_FROM_API
+          $cronSchedule = $env:CRON_SCHEDULE_NAME
+          $manualTestCaseIds = "${{ parameters.testCaseIds }}".Trim()
+
+          if ("${{ parameters.scheduleOverrideFilter }}" -ne "" -and $cronSchedule -eq "${{ parameters.scheduleName }}") {
+            $env:TEST_FILTER = "${{ parameters.scheduleOverrideFilter }}"
+            Write-Host "Schedule override: Running ${{ parameters.scheduleOverrideFilter }} tests"
+          } elseif (-not [string]::IsNullOrEmpty($testCaseIdsFromApi)) {
+            $env:TEST_FILTER = $testCaseIdsFromApi
+            Write-Host "Running tests from Azure Test Plans: $env:TEST_FILTER"
+          } elseif (-not [string]::IsNullOrWhiteSpace($manualTestCaseIds)) {
+            $ids = $manualTestCaseIds -split ','
+            $grepPattern = ($ids | ForEach-Object { "@\[$($_.Trim())\]" }) -join "|"
+            $env:TEST_FILTER = $grepPattern
+            $env:TEST_CASE_IDS_FOR_REPORTER = $manualTestCaseIds
+            Write-Host "Running tests with IDs: $manualTestCaseIds"
+            Write-Host "  TEST_FILTER: $env:TEST_FILTER"
+          } else {
+            $env:TEST_FILTER = "${{ parameters.testFilter }}"
+            Write-Host "Running tests with filter: $env:TEST_FILTER"
+          }
+
+          $workersParam = "${{ parameters.workers }}".Trim()
+          $workersFlag = ""
+          if (-not [string]::IsNullOrWhiteSpace($workersParam)) {
+            $workersFlag = "--workers=$workersParam"
+            Write-Host "Worker override: $workersFlag"
+          }
+
+          npx playwright test ${{ parameters.testPath }} --config=${{ parameters.configFile }} $workersFlag
+      displayName: "Execute Tests (Local Agent)"
+      continueOnError: true
+      env:
+        CI: "true"
+        BASE_URL: "https://${{ parameters.environment }}.aventis.swiss/"
+        CRON_SCHEDULE_NAME: $(Build.CronSchedule.DisplayName)
+        TEST_RUN_ID: $(testRunId)
+        TEST_CASE_IDS_FROM_API: $(GetTestCaseIds.testCaseIds)
+        AZURE_DEVOPS_ORG_URL: $(AZURE_DEVOPS_ORG_URL)
+        AZURE_DEVOPS_PROJECT: $(AZURE_DEVOPS_PROJECT)
+        AZURE_DEVOPS_KV_PLAN_ID: $(AZURE_DEVOPS_KV_PLAN_ID)
+        AZURE_DEVOPS_TOKEN: $(System.AccessToken)
+        AZURE_DEVOPS_ENVIRONMENT: "Local_Agent"
+        ${{ if eq(parameters.environment, 'dev') }}:
+          AZURE_DEVOPS_CONFIG_ID: "77"
+        ${{ elseif eq(parameters.environment, 'staging') }}:
+          AZURE_DEVOPS_CONFIG_ID: "103"
+        ${{ elseif eq(parameters.environment, 'load') }}:
+          AZURE_DEVOPS_CONFIG_ID: "85"
+        ${{ else }}:
+          AZURE_DEVOPS_CONFIG_ID: "93"
+        SLOWMO: $(SLOWMO)
+        STABILITY_DELAY: $(STABILITY_DELAY)
+        ACTION_STABILITY_WAIT: $(ACTION_STABILITY_WAIT)
+        SLOW_MODE: $(SLOW_MODE)
+        REPORTING_RUN: ${{ parameters.reportingRun }}

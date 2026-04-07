@@ -1,0 +1,52 @@
+trigger:
+    - master
+    - develop
+
+pr:
+    - master
+    - develop
+
+pool:
+    vmImage: ubuntu-latest
+
+variables:
+    npm_config_cache: $(Pipeline.Workspace)/.npm
+
+stages:
+    - stage: Validation
+      displayName: "Code Validation"
+      jobs:
+          - job: QualityChecks
+            displayName: "Quality & Build Checks"
+            steps:
+                - task: NodeTool@0
+                  inputs:
+                      versionSpec: "20.x"
+                  displayName: "Install Node.js"
+
+                - task: Cache@2
+                  inputs:
+                      key: 'npm | "$(Agent.OS)" | package-lock.json'
+                      restoreKeys: |
+                          npm | "$(Agent.OS)"
+                      path: $(npm_config_cache)
+                  displayName: "Cache npm"
+
+                - task: Npm@1
+                  inputs:
+                      command: "ci"
+                  displayName: "npm ci (clean install)"
+
+                - task: PublishPipelineArtifact@1
+                  inputs:
+                      targetPath: "."
+                      artifact: "validated-source"
+                  displayName: "Publish Validation Results"
+                  condition: succeeded()
+
+                - script: |
+                      echo "================================"
+                      echo "✅ All validation checks passed!"
+                      echo "================================"
+                  displayName: "Summary"
+                  condition: succeeded()

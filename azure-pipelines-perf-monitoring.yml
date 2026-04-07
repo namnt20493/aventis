@@ -1,0 +1,83 @@
+trigger: none
+pr: none
+
+schedules:
+  - cron: "0 20 * * *"
+    displayName: "Nightly Performance Monitoring (21:00 CET) - Load"
+    branches:
+      include:
+        - master
+    always: true
+
+parameters:
+  - name: environment
+    displayName: "Target Environment"
+    type: string
+    default: "load"
+    values:
+      - load
+      - qa
+      - dev
+      - staging
+  - name: workers
+    displayName: "Parallel Workers (leave empty for config default)"
+    type: string
+    default: " "
+  - name: slowMode
+    displayName: "Slow Mode (increases all timeouts and delays for slow environments)"
+    type: boolean
+    default: false
+
+variables:
+  - template: azure-pipelines/variables/common.yml
+  - ${{ if eq(parameters.slowMode, true) }}:
+    - name: SLOWMO
+      value: "1500"
+    - name: STABILITY_DELAY
+      value: "1500"
+    - name: ACTION_STABILITY_WAIT
+      value: "1000"
+    - name: SLOW_MODE
+      value: "true"
+
+stages:
+  - stage: PerfMonitoring
+    displayName: "Performance Monitoring [Env: ${{ parameters.environment }}]"
+    jobs:
+      # === NIGHTLY SCHEDULE JOB (21:00 CET - Load Environment) ===
+      - template: azure-pipelines/templates/jobs/test-execution-job.yml
+        parameters:
+          jobName: "NightlyPerfMonitoring"
+          displayName: "Nightly Performance Monitoring (Load)"
+          condition: eq(variables['Build.CronSchedule.DisplayName'], 'Nightly Performance Monitoring (21:00 CET) - Load')
+          environment: "load"
+          executionMode: "local-agent"
+          configFile: "playwright.perf.config.ts"
+          testPath: "staticTestcases"
+          testFilter: "@perfMonitoring"
+          scheduleOverrideFilter: "@perfMonitoring"
+          scheduleName: "Nightly Performance Monitoring (21:00 CET) - Load"
+          timeoutInMinutes: 60
+          reportArtifactName: "playwright-html-report-perf-monitoring"
+          publishTraces: false
+          reportingRun: false
+          workers: ${{ parameters.workers }}
+
+      # === MANUAL RUN JOB (any environment) ===
+      - template: azure-pipelines/templates/jobs/test-execution-job.yml
+        parameters:
+          jobName: "ManualPerfMonitoring"
+          displayName: "Manual Performance Monitoring [${{ parameters.environment }}]"
+          condition: ne(variables['Build.CronSchedule.DisplayName'], 'Nightly Performance Monitoring (21:00 CET) - Load')
+          environment: ${{ parameters.environment }}
+          executionMode: "local-agent"
+          configFile: "playwright.perf.config.ts"
+          testPath: "staticTestcases"
+          testFilter: "@perfMonitoring"
+          scheduleOverrideFilter: ""
+          scheduleName: ""
+          timeoutInMinutes: 60
+          reportArtifactName: "playwright-html-report-perf-monitoring"
+          publishTraces: false
+          reportingRun: false
+          workers: ${{ parameters.workers }}

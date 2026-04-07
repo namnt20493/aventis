@@ -1,0 +1,5 @@
+[Environment]::SetEnvironmentVariable("CLAUDE_CODE_USE_FOUNDRY", "1", "User")
+[Environment]::SetEnvironmentVariable("ANTHROPIC_FOUNDRY_RESOURCE", "ai-aventis-testing-resource", "User")
+[Environment]::SetEnvironmentVariable("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-sonnet-4-5", "User")
+[Environment]::SetEnvironmentVariable("ANTHROPIC_DEFAULT_HAIKU_MODEL", "claude-haiku-4-5", "User")
+[Environment]::SetEnvironmentVariable("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-6", "User")

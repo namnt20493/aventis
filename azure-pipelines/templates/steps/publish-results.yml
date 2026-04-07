@@ -1,0 +1,46 @@
+# Step template: Publish test results and artifacts
+# Publishes JUnit results, HTML reports, and optionally traces/screenshots
+parameters:
+  - name: testRunTitle
+    type: string
+    default: "Playwright Tests"
+  - name: artifactName
+    type: string
+    default: "playwright-html-report"
+  - name: publishTraces
+    type: boolean
+    default: false
+  - name: tracesArtifactName
+    type: string
+    default: "test-results-traces"
+
+steps:
+  # Publish JUnit results for pipeline tracking
+  - task: PublishTestResults@2
+    inputs:
+      testResultsFormat: "JUnit"
+      testResultsFiles: "test-results/junit-results.xml"
+      testRunTitle: "${{ parameters.testRunTitle }}"
+      failTaskOnFailedTests: false
+    displayName: "Publish Test Results to Pipeline"
+    condition: always()
+
+  # Publish HTML report (includes flaky test visualization)
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: "playwright-report"
+      artifact: "${{ parameters.artifactName }}"
+      publishLocation: "pipeline"
+    displayName: "Publish Playwright HTML Report"
+    condition: always()
+
+  # Optionally publish raw test-results (traces, videos, screenshots)
+  # Recommended for Local Agent to avoid Azure Reporter encoding issues
+  - ${{ if eq(parameters.publishTraces, true) }}:
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: "test-results"
+        artifact: "${{ parameters.tracesArtifactName }}"
+        publishLocation: "pipeline"
+      displayName: "Publish Traces & Screenshots"
+      condition: always()

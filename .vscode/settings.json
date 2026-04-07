@@ -1,0 +1,24 @@
+{
+    "editor.formatOnSave": true,
+    "[typescript]": {
+        "editor.defaultFormatter": "hb432.prettier-eslint-typescript"
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "hb432.prettier-eslint-typescript"
+    },
+    "prettier-eslint-typescript.prettierOptions": {
+        "tabWidth": 4,
+        "useTabs": false,
+        "singleQuote": false,
+        "semi": true,
+        "trailingComma": "none",
+        "printWidth": 400
+    },
+    "playwright.env": {},
+    "playwright.showTrace": false,
+    "playwright.reuseBrowser": false,
+    "chat.tools.terminal.autoApprove": {
+        "tee": true,
+        "npx tsx": true
+    }
+}

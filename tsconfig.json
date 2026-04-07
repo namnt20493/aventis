@@ -1,0 +1,66 @@
+{
+    "ts-node": {
+        "esm": true,
+        "experimentalSpecifierResolution": "node"
+    },
+    "compilerOptions": {
+        "target": "ES2022",
+        "lib": [
+            "ES2022",
+            "DOM"
+        ],
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "experimentalDecorators": true,
+        "strict": true,
+        "noImplicitAny": false,
+        "skipLibCheck": true,
+        "ignoreDeprecations": "5.0",
+        "baseUrl": "./",
+        "paths": {
+            "@core": [
+                "libs/core/index"
+            ],
+            "@core/*": [
+                "libs/core/*"
+            ],
+            "@core/interfaces": [
+                "libs/core/interfaces/index"
+            ],
+            "@libs/*": [
+                "libs/*"
+            ],
+            "@keywords/*": [
+                "libs/keywords/*"
+            ],
+            "@parameters/*": [
+                "libs/utils/parameters/*"
+            ],
+            "@utils/*": [
+                "libs/utils/*"
+            ],
+            "@sharedTestsSteps/*": [
+                "libs/sharedTestSteps/*"
+            ],
+            "@pages/*": [
+                "libs/pages/*"
+            ],
+            "@constants/*": [
+                "libs/constants/*"
+            ],
+            "@workflows": [
+                "libs/workflows/index"
+            ],
+            "@workflows/*": [
+                "libs/workflows/*"
+            ]
+        }
+    },
+    "exclude": [
+        "testcases/**/*",
+        "node_modules"
+    ]
+}

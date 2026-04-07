@@ -1,0 +1,23 @@
+# Common variables shared across all test pipelines
+variables:
+  - name: npm_config_cache
+    value: $(Pipeline.Workspace)/.npm
+
+  # Variable group containing Playwright Azure Reporter credentials
+  - group: playwright-azure-reporter
+
+  # Azure Test Plans variables (passed when triggered via "Run with options")
+  - name: testRunId
+    value: $[coalesce(variables['TestRun.TestRunId'], '')]
+  - name: testPlanId
+    value: $[coalesce(variables['TestPlan.TestPlanId'], '')]
+
+  # Test execution stability settings
+  - name: SLOWMO
+    value: "500"
+  - name: STABILITY_DELAY
+    value: "700"
+  - name: ACTION_STABILITY_WAIT
+    value: "500"
+  - name: SLOW_MODE
+    value: "false"

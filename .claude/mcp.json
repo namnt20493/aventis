@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "azure-devops": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@azure-devops/mcp@latest",
+        "diartis",
+        "--authentication",
+        "azcli",
+        "-d",
+        "work-items",
+        "-d",
+        "test-plans",
+        "-d",
+        "repositories"
+      ]
+    }
+  }
+}

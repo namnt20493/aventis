@@ -1,0 +1,46 @@
+# Environment files with secrets
+.env
+.env.local
+
+# Auth state cache (contains session tokens)
+.auth/
+
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/testcases/
+/screenshots/
+**/__screenshots__/
+**/_screenshots/
+__snapshots__/
+__screenshots__/
+~$*
+parameter.json
+/testData/
+/document/
+.vs/
+.idea/
+seed.spec.ts
+/logs/
+*-cwd
+NUL
+
+# GitHub AI agent configs (developer-specific)
+.github/chatmodes/
+/.github/agents/aventisE2E.agent.md
+/.github/copilot-instructions.md
+
+# VS Code (mcp.json is developer-specific, settings.json is tracked for team standards)
+.vscode/mcp.json
+
+# Claude Code (settings.json is shared team config, the rest is developer-specific)
+.claude/settings.local.json
+.claude/claudian-settings.json
+.claude/sessions/
+.mcp.json
+.playwright-mcp
+
+# Obsidian vault config
+.obsidian/

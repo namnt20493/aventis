@@ -1,0 +1,111 @@
+trigger: none
+pr: none
+
+schedules:
+  - cron: "0 5 * * 1"
+    displayName: "Weekly Journey Tests (05:00 UTC Monday)"
+    branches:
+      include:
+        - master
+    always: true
+
+parameters:
+  - name: environment
+    displayName: "Target Environment"
+    type: string
+    default: "qa"
+    values:
+      - dev
+      - qa
+      - staging
+  - name: executionMode
+    displayName: "Execution Mode"
+    type: string
+    default: "local-agent"
+    values:
+      - azure-workspace # Playwright Workspaces (Cloud - parallel execution)
+      - local-agent # Local VM in 'Automated Testing' pool
+  - name: testCaseIds
+    displayName: "Test Case IDs (comma-separated, e.g., 183011,183012,183013)"
+    type: string
+    default: " "
+  - name: testFilter
+    displayName: "Test Filter - ignored if Test Case IDs are set"
+    type: string
+    default: "@journey"
+    values:
+      - "@journey" # Journey tests (default)
+  - name: reportingRun
+    displayName: "Reporting Run (video + trace + screenshots for test designer review)"
+    type: boolean
+    default: false
+  - name: workers
+    displayName: "Parallel Workers (leave empty for config default)"
+    type: string
+    default: " "
+  - name: slowMode
+    displayName: "Slow Mode (increases all timeouts and delays for slow environments)"
+    type: boolean
+    default: false
+
+# Import shared variables
+variables:
+  - template: azure-pipelines/variables/common.yml
+  - ${{ if eq(parameters.slowMode, true) }}:
+    - name: SLOWMO
+      value: "1500"
+    - name: STABILITY_DELAY
+      value: "1500"
+    - name: ACTION_STABILITY_WAIT
+      value: "1000"
+    - name: SLOW_MODE
+      value: "true"
+
+stages:
+  - stage: JourneyTests
+    ${{ if or(eq(parameters.testCaseIds, ''), eq(parameters.testCaseIds, ' ')) }}:
+      displayName: "Journey Tests [Filter: ${{ parameters.testFilter }}] [Env: ${{ parameters.environment }}] [Mode: ${{ parameters.executionMode }}]"
+    ${{ else }}:
+      displayName: "Journey Tests [IDs: ${{ parameters.testCaseIds }}] [Env: ${{ parameters.environment }}] [Mode: ${{ parameters.executionMode }}]"
+    jobs:
+      # === AZURE WORKSPACE MODE ===
+      - ${{ if eq(parameters.executionMode, 'azure-workspace') }}:
+        - template: azure-pipelines/templates/jobs/test-execution-job.yml
+          parameters:
+            jobName: "JourneyTests"
+            displayName: "Journey Tests [Filter: ${{ parameters.testFilter }}]"
+            condition: "true"
+            environment: ${{ parameters.environment }}
+            executionMode: "azure-workspace"
+            configFile: "playwright.journey.config.ts"
+            testPath: "staticTestcases"
+            testFilter: ${{ parameters.testFilter }}
+            testCaseIds: ${{ parameters.testCaseIds }}
+            scheduleOverrideFilter: ""
+            scheduleName: ""
+            timeoutInMinutes: 120
+            reportArtifactName: "journey-report"
+            publishTraces: ${{ or(eq(parameters.reportingRun, true), false) }}
+            reportingRun: ${{ parameters.reportingRun }}
+            workers: ${{ parameters.workers }}
+
+      # === LOCAL AGENT MODE ===
+      - ${{ if eq(parameters.executionMode, 'local-agent') }}:
+        - template: azure-pipelines/templates/jobs/test-execution-job.yml
+          parameters:
+            jobName: "JourneyTests"
+            displayName: "Journey Tests [Filter: ${{ parameters.testFilter }}]"
+            condition: "true"
+            environment: ${{ parameters.environment }}
+            executionMode: "local-agent"
+            configFile: "playwright.journey-local.config.ts"
+            testPath: "staticTestcases"
+            testFilter: ${{ parameters.testFilter }}
+            testCaseIds: ${{ parameters.testCaseIds }}
+            scheduleOverrideFilter: ""
+            scheduleName: ""
+            timeoutInMinutes: 120
+            reportArtifactName: "journey-report"
+            publishTraces: true
+            reportingRun: ${{ parameters.reportingRun }}
+            workers: ${{ parameters.workers }}

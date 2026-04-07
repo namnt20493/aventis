@@ -1,0 +1,45 @@
+# Step template: Checkout repository and switch to environment-specific branch
+# Parameters:
+#   - environment: 'dev' (aventis_DEV) or 'qa' (master)
+parameters:
+  - name: environment
+    type: string
+    default: "qa"
+    values:
+      - dev
+      - qa
+      - staging
+      - load
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+    displayName: "Checkout repository"
+
+  - ${{ if eq(parameters.environment, 'dev') }}:
+    - script: |
+        git fetch origin aventis_DEV
+        git checkout aventis_DEV
+        git reset --hard origin/aventis_DEV
+      displayName: "Switch to aventis_DEV branch (dev)"
+
+  - ${{ if eq(parameters.environment, 'qa') }}:
+    - script: |
+        git fetch origin master
+        git checkout master
+        git reset --hard origin/master
+      displayName: "Switch to master branch (qa)"
+
+  - ${{ if eq(parameters.environment, 'staging') }}:
+    - script: |
+        git fetch origin master
+        git checkout master
+        git reset --hard origin/master
+      displayName: "Switch to master branch (staging)"
+
+  - ${{ if eq(parameters.environment, 'load') }}:
+    - script: |
+        git fetch origin master
+        git checkout master
+        git reset --hard origin/master
+      displayName: "Switch to master branch (load)"

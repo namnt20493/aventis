@@ -1,0 +1,10 @@
+{
+    "enableAllProjectMcpServers": true,
+    "env": {
+        "CLAUDE_CODE_USE_FOUNDRY": "1",
+        "ANTHROPIC_FOUNDRY_RESOURCE": "ai-aventis-testing-resource",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-6"
+    }
+}

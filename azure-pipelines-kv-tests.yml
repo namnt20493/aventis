@@ -1,0 +1,148 @@
+trigger: none
+pr: none
+
+schedules:
+  - cron: "0 21 * * *"
+    displayName: "Evening All Tests (22:00 CET) - Local Agent"
+    branches:
+      include:
+        - master
+    always: true
+
+parameters:
+  - name: environment
+    displayName: "Target Environment"
+    type: string
+    default: "qa"
+    values:
+      - dev
+      - qa
+      - staging
+  - name: executionMode
+    displayName: "Execution Mode"
+    type: string
+    default: "local-agent"
+    values:
+      - azure-workspace # Playwright Workspaces (Cloud - parallel execution)
+      - local-agent # Local VM in 'Automated Testing' pool
+  - name: testCaseIds
+    displayName: "Test Case IDs (comma-separated, e.g., 183011,183012,183013)"
+    type: string
+    default: " "
+  - name: testFilter
+    displayName: "Test Filter (Business Category) - ignored if Single Test Case ID is set"
+    type: string
+    default: "@keywordValidation"
+    values:
+      - "@coreBusiness" # Core Business tests
+      - "@keywordValidation" # All stable tests
+      - "@acceptance" # Acceptance tests
+      - "@functionalUI" # Functional UI tests
+      - "@smoke" # Smoke tests only
+      - "@aufgaben" # Tasks, Journal, Ziele
+      - "@bedarfspruefung" # Anspruchsprüfung, Soforthilfe
+      - "@bewilligung" # Bewilligungsworkflow
+      - "@dokumente" # Dokumenteingang, Briefe
+      - "@dossier" # Dossier-Management
+      - "@erwerbsintegration" # FEV
+      - "@klient" # Personendaten, Einnahmen, Vermögen
+      - "@kontakte" # Institutionen, Bezugspersonen
+      - "@kostengutsprache" # KG, SL
+      - "@rahmenbudget" # Budget, GBL, Freibetrag
+      - "@rechtsverfolgung" # Ermittlung, Beschwerde
+      - "@wohnsituation" # Wohnung, Haushalt
+      - "@zahlungen" # Zahlungen, Buchungen, WSH
+  - name: reportingRun
+    displayName: "Reporting Run (video + trace + screenshots for test designer review)"
+    type: boolean
+    default: false
+  - name: workers
+    displayName: "Parallel Workers (leave empty for config default)"
+    type: string
+    default: " "
+  - name: slowMode
+    displayName: "Slow Mode (increases all timeouts and delays for slow environments)"
+    type: boolean
+    default: false
+
+# Import shared variables
+variables:
+  - template: azure-pipelines/variables/common.yml
+  - ${{ if eq(parameters.slowMode, true) }}:
+    - name: SLOWMO
+      value: "1500"
+    - name: STABILITY_DELAY
+      value: "1500"
+    - name: ACTION_STABILITY_WAIT
+      value: "1000"
+    - name: SLOW_MODE
+      value: "true"
+
+stages:
+  # Stage: Execute Tests
+  - stage: ExecuteTests
+    ${{ if or(eq(parameters.testCaseIds, ''), eq(parameters.testCaseIds, ' ')) }}:
+      displayName: "Execute Tests [Filter: ${{ parameters.testFilter }}] [Env: ${{ parameters.environment }}] [Mode: ${{ parameters.executionMode }}]"
+    ${{ else }}:
+      displayName: "Execute Tests [IDs: ${{ parameters.testCaseIds }}] [Env: ${{ parameters.environment }}] [Mode: ${{ parameters.executionMode }}]"
+    jobs:
+      # === EVENING SCHEDULE JOB (22:00 CET - Local Agent with @keywordValidation) ===
+      - template: azure-pipelines/templates/jobs/test-execution-job.yml
+        parameters:
+          jobName: "EveningScheduleTests"
+          displayName: "Evening Schedule - All Tests on Local Agent (QA)"
+          condition: eq(variables['Build.CronSchedule.DisplayName'], 'Evening All Tests (22:00 CET) - Local Agent')
+          environment: "qa"
+          executionMode: "local-agent"
+          configFile: "playwright.kv.config.ts"
+          testPath: "staticTestcases"
+          testFilter: "@keywordValidation"
+          scheduleOverrideFilter: "@keywordValidation"
+          scheduleName: "Evening All Tests (22:00 CET) - Local Agent"
+          timeoutInMinutes: 120
+          reportArtifactName: "playwright-html-report-evening"
+          publishTraces: true
+          reportingRun: ${{ parameters.reportingRun }}
+          workers: ${{ parameters.workers }}
+
+      # === REGULAR JOB - AZURE WORKSPACE MODE ===
+      - ${{ if eq(parameters.executionMode, 'azure-workspace') }}:
+        - template: azure-pipelines/templates/jobs/test-execution-job.yml
+          parameters:
+            jobName: "ExecuteTests"
+            displayName: "Execute Tests [Filter: ${{ parameters.testFilter }}]"
+            condition: ne(variables['Build.CronSchedule.DisplayName'], 'Evening All Tests (22:00 CET) - Local Agent')
+            environment: ${{ parameters.environment }}
+            executionMode: "azure-workspace"
+            configFile: "playwright.kv-azure.config.ts"
+            testPath: "staticTestcases"
+            testFilter: ${{ parameters.testFilter }}
+            testCaseIds: ${{ parameters.testCaseIds }}
+            scheduleOverrideFilter: ""
+            scheduleName: ""
+            timeoutInMinutes: 60
+            reportArtifactName: "playwright-html-report"
+            publishTraces: ${{ or(eq(parameters.reportingRun, true), false) }}
+            reportingRun: ${{ parameters.reportingRun }}
+            workers: ${{ parameters.workers }}
+
+      # === REGULAR JOB - LOCAL AGENT MODE ===
+      - ${{ if eq(parameters.executionMode, 'local-agent') }}:
+        - template: azure-pipelines/templates/jobs/test-execution-job.yml
+          parameters:
+            jobName: "ExecuteTests"
+            displayName: "Execute Tests [Filter: ${{ parameters.testFilter }}]"
+            condition: ne(variables['Build.CronSchedule.DisplayName'], 'Evening All Tests (22:00 CET) - Local Agent')
+            environment: ${{ parameters.environment }}
+            executionMode: "local-agent"
+            configFile: "playwright.kv.config.ts"
+            testPath: "staticTestcases"
+            testFilter: ${{ parameters.testFilter }}
+            testCaseIds: ${{ parameters.testCaseIds }}
+            scheduleOverrideFilter: ""
+            scheduleName: ""
+            timeoutInMinutes: 60
+            reportArtifactName: "playwright-html-report"
+            publishTraces: true
+            reportingRun: ${{ parameters.reportingRun }}
+            workers: ${{ parameters.workers }}

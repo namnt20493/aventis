@@ -1,0 +1,33 @@
+# Step template: Validate test sync state
+# Runs before test execution to detect manifest drift
+# WARNING only - does not block the build
+
+steps:
+  - task: PowerShell@2
+    displayName: "Validate Test Sync State"
+    continueOnError: true
+    inputs:
+      targetType: inline
+      script: |
+        Write-Host "=== Test Sync Validation ==="
+
+        # Generate fresh manifest
+        npx tsx libs/utils/azure-test-sync-cli.ts sync 2>&1
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "##vso[task.logissue type=warning]Failed to generate test manifest"
+          exit 0
+        }
+
+        # Run validation
+        $output = npx tsx libs/utils/azure-test-sync-cli.ts validate --format json 2>&1
+        Write-Host $output
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "##vso[task.logissue type=warning]Test manifest drift detected - check validation output above"
+        } else {
+          Write-Host "Test sync validation passed"
+        }
+
+        # Always succeed - validation is advisory only
+        exit 0

@@ -1,0 +1,105 @@
+trigger: none
+pr: none
+
+schedules:
+  - cron: "0 3 * * *"
+    displayName: "Nightly Functional UI Tests (03:00 UTC)"
+    branches:
+      include:
+        - aventis_DEV
+    always: true
+
+parameters:
+  - name: environment
+    displayName: "Target Environment"
+    type: string
+    default: "dev"
+    values:
+      - dev
+      - qa
+      - staging
+  - name: executionMode
+    displayName: "Execution Mode"
+    type: string
+    default: "azure-workspace"
+    values:
+      - azure-workspace # Playwright Workspaces (Cloud - parallel execution)
+      - local-agent # Local VM in 'Automated Testing' pool
+  - name: testCaseIds
+    displayName: "Test Case IDs (comma-separated, e.g., 183011,183012,183013)"
+    type: string
+    default: " "
+  - name: testFilter
+    displayName: "Test Filter (Override default @functionalUI)"
+    type: string
+    default: "@functionalUI"
+    values:
+      - "@functionalUI" # Functional UI tests (default)
+  - name: workers
+    displayName: "Parallel Workers (leave empty for config default)"
+    type: string
+    default: " "
+  - name: slowMode
+    displayName: "Slow Mode (increases all timeouts and delays for slow environments)"
+    type: boolean
+    default: false
+
+# Import shared variables
+variables:
+  - template: azure-pipelines/variables/common.yml
+  - ${{ if eq(parameters.slowMode, true) }}:
+    - name: SLOWMO
+      value: "1500"
+    - name: STABILITY_DELAY
+      value: "1500"
+    - name: ACTION_STABILITY_WAIT
+      value: "1000"
+    - name: SLOW_MODE
+      value: "true"
+
+stages:
+  - stage: FunctionalUITests
+    ${{ if or(eq(parameters.testCaseIds, ''), eq(parameters.testCaseIds, ' ')) }}:
+      displayName: "Functional UI Tests [Filter: ${{ parameters.testFilter }}] [Env: ${{ parameters.environment }}] [Mode: ${{ parameters.executionMode }}]"
+    ${{ else }}:
+      displayName: "Functional UI Tests [IDs: ${{ parameters.testCaseIds }}] [Env: ${{ parameters.environment }}] [Mode: ${{ parameters.executionMode }}]"
+    jobs:
+      # === AZURE WORKSPACE MODE ===
+      - ${{ if eq(parameters.executionMode, 'azure-workspace') }}:
+        - template: azure-pipelines/templates/jobs/test-execution-job.yml
+          parameters:
+            jobName: "FunctionalUITests"
+            displayName: "Functional UI Tests"
+            condition: "true"
+            environment: ${{ parameters.environment }}
+            executionMode: "azure-workspace"
+            configFile: "playwright.functional-ui.config.ts"
+            testPath: "staticTestcases"
+            testFilter: ${{ parameters.testFilter }}
+            testCaseIds: ${{ parameters.testCaseIds }}
+            scheduleOverrideFilter: ""
+            scheduleName: ""
+            timeoutInMinutes: 90
+            reportArtifactName: "functional-ui-report"
+            publishTraces: false
+            workers: ${{ parameters.workers }}
+
+      # === LOCAL AGENT MODE ===
+      - ${{ if eq(parameters.executionMode, 'local-agent') }}:
+        - template: azure-pipelines/templates/jobs/test-execution-job.yml
+          parameters:
+            jobName: "FunctionalUITests"
+            displayName: "Functional UI Tests"
+            condition: "true"
+            environment: ${{ parameters.environment }}
+            executionMode: "local-agent"
+            configFile: "playwright.functional-ui-local.config.ts"
+            testPath: "staticTestcases"
+            testFilter: ${{ parameters.testFilter }}
+            testCaseIds: ${{ parameters.testCaseIds }}
+            scheduleOverrideFilter: ""
+            scheduleName: ""
+            timeoutInMinutes: 90
+            reportArtifactName: "functional-ui-report"
+            publishTraces: true
+            workers: ${{ parameters.workers }}
